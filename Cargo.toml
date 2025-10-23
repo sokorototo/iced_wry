@@ -1,0 +1,22 @@
+[package]
+name = "iced_wry"
+description = "Embed a webview in your iced application, using the wry webkit crate"
+license = "MIT"
+authors = ["Newton Toto <nyachiengatoto@gmail.com>"]
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+wry = { version = "0.53", default-features = false, features = [
+	"os-webview",
+	"drag-drop",
+] }
+iced = { version = "0.13", default-features = false, features = ["advanced"] }
+oneshot = "0.1.11"
+
+[dev-dependencies]
+iced = { version = "0.13", default-features = false, features = [
+	"lazy",
+	"advanced",
+	"tiny-skia",
+] }
