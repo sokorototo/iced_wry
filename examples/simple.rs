@@ -2,7 +2,6 @@ use iced::widget;
 
 #[derive(Debug, Clone)]
 enum Message {
-	FrameTick,
 	EditUrlInput(String),
 	CreateView,
 	ToggleWebview,
@@ -29,7 +28,7 @@ fn main() {
 				url_input: Default::default(),
 
 				main_window: None,
-				webview_manager: iced_wry::IcedWebviewManager::init(),
+				webview_manager: iced_wry::IcedWebviewManager::new(),
 				webview: Default::default(),
 				webview_visible: true,
 			},
@@ -42,9 +41,6 @@ fn main() {
 		message: Message,
 	) -> iced::Task<Message> {
 		match message {
-			Message::FrameTick => {
-				state.frames += 1;
-			}
 			Message::EditUrlInput(chars) => {
 				state.url_input = chars;
 			}
@@ -82,6 +78,8 @@ fn main() {
 		state: &'a State,
 		_: iced::window::Id,
 	) -> widget::Column<'a, Message> {
+		println!("`view` called");
+
 		widget::column![
 			widget::row![
 				widget::text!("Frames Rendered: {}", state.frames),
@@ -97,12 +95,5 @@ fn main() {
 		.push_maybe(state.webview_visible.then(|| state.webview.as_ref().map(|w| w.view(iced::Length::Fill, iced::Length::Fill))).flatten())
 	}
 
-	fn subscription<'a>(_: &'a State) -> iced::Subscription<Message> {
-		iced::window::frames().map(|_| Message::FrameTick)
-	}
-
-	iced::daemon::<_, Message, iced::Theme, iced::Renderer>("Simple Webview Test", update, view)
-		.subscription(subscription)
-		.run_with(new)
-		.unwrap();
+	iced::daemon::<_, Message, iced::Theme, iced::Renderer>("Simple Webview Test", update, view).run_with(new).unwrap();
 }

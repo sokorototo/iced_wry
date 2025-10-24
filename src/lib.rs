@@ -1,6 +1,7 @@
 use std::{collections, sync};
 pub use wry;
 
+#[derive(Debug, Clone)]
 pub enum IcedWryUpdate {
 	HideWebviews(Vec<usize>),
 }
@@ -9,7 +10,7 @@ pub enum IcedWryUpdate {
 #[derive(Debug, Clone)]
 pub struct IcedWebviewManager {
 	webviews: collections::BTreeMap<usize, sync::Weak<wry::WebView>>,
-	// [previous, current] tracks two frame states, and only toggles off webview if state == [true, false]
+	// tracks the last active frame when a webview was rendered, hiding any webviews where the last active frame is lower than the current active frame
 	display_tracker: sync::Arc<sync::Mutex<collections::BTreeMap<usize, [bool; 2]>>>,
 }
 
@@ -19,9 +20,8 @@ impl IcedWebviewManager {
 		WEBVIEW_COUNTER.fetch_add(1, sync::atomic::Ordering::Relaxed)
 	}
 
-	/// Initializes an iced [`subscription`](iced::Subscription) (for layout and visibility automation) and [`IcedWebviewManager`] (for Webview creation and sync).
-	/// The subscription must be installed into the runtime, to keep the webview's visibility updated
-	pub fn init() -> IcedWebviewManager {
+	/// Instantiate a new manager cuz
+	pub fn new() -> IcedWebviewManager {
 		IcedWebviewManager {
 			webviews: collections::BTreeMap::new(),
 			display_tracker: sync::Arc::new(sync::Mutex::new(collections::BTreeMap::new())),
@@ -55,7 +55,7 @@ impl IcedWebviewManager {
 		})
 	}
 
-	/// Updates state for webviews tracked by [`display_tracker_task`](IcedWebviewManager::display_tracker_task)
+	/// Updates state for webviews updates sent by [`IcedWebviewManager::subscription`]
 	pub fn update(
 		&mut self,
 		update: IcedWryUpdate,
@@ -77,9 +77,10 @@ impl IcedWebviewManager {
 		}
 	}
 
-	/// Task that checks state for current webviews and syncs the state
-	pub fn webview_tracker_task(&self) -> iced::Task<IcedWryUpdate> {
-		unimplemented!()
+	/// Subscription that runs every frame, and syncs visibility and bounds for managed overlays
+	pub fn subscription(&self) -> iced::Task<IcedWryUpdate> {
+		// let tracker = self.display_tracker.clone();
+		iced::Task::none()
 	}
 }
 
@@ -169,6 +170,14 @@ impl<'a, Message, Theme, R: iced::advanced::Renderer> iced::advanced::Widget<Mes
 		};
 
 		if let Err(err) = self.inner.as_ref().set_visible(true) {
+			eprintln!("Unable to update visibility for webview with id: {}\n{}", self.inner.id, err)
+		};
+	}
+}
+
+impl<'a> Drop for IcedWebviewContainerElement<'a> {
+	fn drop(&mut self) {
+		if let Err(err) = self.inner.as_ref().set_visible(false) {
 			eprintln!("Unable to update visibility for webview with id: {}\n{}", self.inner.id, err)
 		};
 	}
