@@ -1,3 +1,7 @@
+mod message;
+mod subscription;
+
+pub use message::IcedWryMessage;
 use std::{cell, collections, sync};
 pub use wry;
 
@@ -5,14 +9,11 @@ thread_local! {
 	static WINDOW_HANDLES: cell::RefCell<collections::BTreeMap<usize, iced::window::raw_window_handle::RawWindowHandle>> = cell::RefCell::new(collections::BTreeMap::new());
 }
 
-#[derive(Debug, Clone)]
-pub enum IcedWryUpdate {
-	HideWebviews(Vec<usize>),
-}
-
 /// Stores state for synchronizing visibility and bounds for any managed [`webviews`](wry::WebView)
 #[derive(Debug, Clone)]
 pub struct IcedWebviewManager {
+	// simply used to differentiate between subscriptions
+	manager_id: usize,
 	webviews: collections::BTreeMap<usize, sync::Weak<wry::WebView>>,
 	// tracks the last active frame when a webview was rendered, hiding any webviews where the last active frame is lower than the current active frame
 	display_tracker: sync::Arc<sync::Mutex<collections::BTreeMap<usize, [bool; 2]>>>,
@@ -27,6 +28,7 @@ impl IcedWebviewManager {
 	/// Instantiate a new manager cuz
 	pub fn new() -> IcedWebviewManager {
 		IcedWebviewManager {
+			manager_id: IcedWebviewManager::increment_id(),
 			webviews: collections::BTreeMap::new(),
 			display_tracker: sync::Arc::new(sync::Mutex::new(collections::BTreeMap::new())),
 		}
@@ -104,13 +106,24 @@ impl IcedWebviewManager {
 		})
 	}
 
+	/// Subscription that runs every frame, and syncs visibility and bounds for managed overlays
+	pub fn subscription(&self) -> iced::Subscription<message::IcedWryMessage> {
+		let tracker = self.display_tracker.clone();
+		let recipe = subscription::VisibilityUpdater {
+			id: self.manager_id,
+			frame_tracker: tracker,
+		};
+
+		iced::advanced::subscription::from_recipe(recipe)
+	}
+
 	/// Updates state for webviews updates sent by [`IcedWebviewManager::subscription`]
 	pub fn update(
 		&mut self,
-		update: IcedWryUpdate,
+		msg: message::IcedWryMessage,
 	) {
-		match update {
-			IcedWryUpdate::HideWebviews(ids) => {
+		match msg {
+			message::IcedWryMessage::HideWebviews(ids) => {
 				for id in ids {
 					if let Some(weak) = self.webviews.get(&id) {
 						if let Some(webview) = weak.upgrade() {
@@ -124,12 +137,6 @@ impl IcedWebviewManager {
 				}
 			}
 		}
-	}
-
-	/// Subscription that runs every frame, and syncs visibility and bounds for managed overlays
-	pub fn subscription(&self) -> iced::Task<IcedWryUpdate> {
-		// let tracker = self.display_tracker.clone();
-		iced::Task::none()
 	}
 }
 
@@ -226,12 +233,8 @@ impl<'a, Message, Theme, R: iced::advanced::Renderer> iced::advanced::Widget<Mes
 
 impl<'a> Drop for IcedWebviewContainerElement<'a> {
 	fn drop(&mut self) {
-		println!("Webview container dropped");
-
-		if let Err(err) = self.inner.as_ref().set_visible(false) {
-			eprintln!("Unable to update visibility for webview with id: {}\n{}", self.inner.id, err)
-		} else {
-			self.inner.webview.focus_parent().unwrap();
+		if let Err(err) = self.inner.webview.focus_parent() {
+			eprintln!("Unable to focus parent for webview with id: {}\n{}", self.inner.id, err)
 		};
 	}
 }

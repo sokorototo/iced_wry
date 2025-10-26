@@ -7,6 +7,7 @@ enum Message {
 	ToggleWebview,
 	CreatedMainWindow(iced::window::Id),
 	ExtractedWindowHandle(usize),
+	IcedWryMessage(iced_wry::IcedWryMessage),
 }
 
 struct State {
@@ -52,6 +53,7 @@ fn main() {
 				state.webview = Some(webview);
 			}
 			Message::CreatedMainWindow(id) => state.main_window = Some(id),
+			Message::IcedWryMessage(msg) => state.webview_manager.update(msg),
 		}
 
 		iced::Task::none()
@@ -61,8 +63,6 @@ fn main() {
 		state: &'a State,
 		_: iced::window::Id,
 	) -> widget::Column<'a, Message> {
-		println!("`view` called");
-
 		widget::column![widget::row![
 			widget::text_input("Enter a URL to open", state.url_input.as_str()).on_input(Message::EditUrlInput),
 			widget::button("Go To").on_press_maybe((!state.url_input.is_empty()).then_some(Message::CreateView)),
@@ -72,5 +72,12 @@ fn main() {
 		.push_maybe((!state.webview_visible).then_some(widget::text("Webview Not Displayed :)")))
 	}
 
-	iced::daemon::<_, Message, iced::Theme, iced::Renderer>("Simple Webview Test", update, view).run_with(new).unwrap();
+	fn subscription<'a>(state: &'a State) -> iced::Subscription<Message> {
+		state.webview_manager.subscription().map(Message::IcedWryMessage)
+	}
+
+	iced::daemon::<_, Message, iced::Theme, iced::Renderer>("Simple Webview Test", update, view)
+		.subscription(subscription)
+		.run_with(new)
+		.unwrap();
 }
