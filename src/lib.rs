@@ -1,5 +1,9 @@
-use std::{collections, sync};
+use std::{cell, collections, sync};
 pub use wry;
+
+thread_local! {
+	static WINDOW_HANDLES: cell::RefCell<collections::BTreeMap<usize, iced::window::raw_window_handle::RawWindowHandle>> = cell::RefCell::new(collections::BTreeMap::new());
+}
 
 #[derive(Debug, Clone)]
 pub enum IcedWryUpdate {
@@ -28,29 +32,74 @@ impl IcedWebviewManager {
 		}
 	}
 
-	/// Use [`get_oldest`](iced::window::get_oldest) to acquire the main window's [`Id`](iced::window::Id), then use [`run_with_handle`](iced::window::run_with_handle) to acquire the [`WindowHandle`](iced::window::raw_window_handle::WindowHandle)
+	/// Pass [`None`] to use the main window. If no window is active, Task never yields
+	pub fn acquire_window_handle(window_id: Option<iced::window::Id>) -> iced::Task<usize> {
+		let _id = IcedWebviewManager::increment_id();
+
+		match window_id {
+			Some(id) => iced::window::run_with_handle(id, move |handle| {
+				let raw = handle.as_raw();
+
+				WINDOW_HANDLES.with_borrow_mut(move |handles| {
+					let _ = handles.insert(_id, raw);
+				});
+
+				_id
+			}),
+			None => iced::window::get_oldest().then(move |id| match id {
+				Some(id) => iced::window::run_with_handle(id, move |handle| {
+					let raw = handle.as_raw();
+
+					WINDOW_HANDLES.with_borrow_mut(move |handles| {
+						let _ = handles.insert(_id, raw);
+					});
+
+					_id
+				}),
+				None => iced::Task::none(),
+			}),
+		}
+	}
+
+	/// Use the [`usize`] yielded by [`acquire_window_handle`] to spawn a webview
 	pub fn new_webview(
 		&mut self,
 		mut attrs: wry::WebViewAttributes<'static>,
-		window_handle: &iced::window::raw_window_handle::WindowHandle<'_>,
-	) -> Result<IcedWebview, wry::Error> {
-		let id = IcedWebviewManager::increment_id();
+		window_id: usize,
+	) -> Option<IcedWebview> {
 		attrs.visible = false;
+		attrs.focused = false;
+
+		// acquire window handle
+		let result = WINDOW_HANDLES.with_borrow_mut(move |w| {
+			w.get(&window_id).map(|raw| {
+				let window_handle = unsafe { iced::window::raw_window_handle::WindowHandle::borrow_raw(*raw) };
+				wry::WebView::new_as_child(&window_handle, attrs)
+			})
+		})?;
+
+		let webview = match result {
+			Ok(w) => w,
+			Err(e) => {
+				eprintln!("Unable to create webview: {}", e);
+				return None;
+			}
+		};
 
 		// persist webview state
-		let webview = wry::WebView::new_as_child(window_handle, attrs)?;
+		let webview_id = IcedWebviewManager::increment_id();
 		let webview = sync::Arc::new(webview);
 
-		self.webviews.insert(id, sync::Arc::downgrade(&webview));
+		self.webviews.insert(webview_id, sync::Arc::downgrade(&webview));
 
 		// setup frame persistence state
 		if let Ok(mut guard) = self.display_tracker.lock() {
-			guard.entry(id).and_modify(|s| *s = [false, false]).or_insert([false, false]);
+			guard.entry(webview_id).and_modify(|s| *s = [false, false]).or_insert([false, false]);
 		};
 
-		Ok(IcedWebview {
+		Some(IcedWebview {
 			webview,
-			id,
+			id: webview_id,
 			tracker: self.display_tracker.clone(),
 		})
 	}
@@ -177,8 +226,12 @@ impl<'a, Message, Theme, R: iced::advanced::Renderer> iced::advanced::Widget<Mes
 
 impl<'a> Drop for IcedWebviewContainerElement<'a> {
 	fn drop(&mut self) {
+		println!("Webview container dropped");
+
 		if let Err(err) = self.inner.as_ref().set_visible(false) {
 			eprintln!("Unable to update visibility for webview with id: {}\n{}", self.inner.id, err)
+		} else {
+			self.inner.webview.focus_parent().unwrap();
 		};
 	}
 }
