@@ -1,11 +1,12 @@
 use iced::futures::{StreamExt, stream::unfold};
-use std::{collections, hash::Hasher, sync};
+use std::{collections, hash::Hasher, sync, time};
 
 use crate::*;
 
 pub(crate) struct VisibilityUpdater {
+	pub(crate) persist_duration: time::Duration,
 	pub(crate) id: usize,
-	pub(crate) frame_tracker: sync::Arc<sync::Mutex<collections::BTreeMap<usize, [bool; 2]>>>,
+	pub(crate) frame_tracker: sync::Arc<sync::Mutex<collections::BTreeMap<usize, time::Instant>>>,
 }
 
 impl iced::advanced::subscription::Recipe for VisibilityUpdater {
@@ -23,19 +24,27 @@ impl iced::advanced::subscription::Recipe for VisibilityUpdater {
 		self: Box<Self>,
 		input: iced::advanced::subscription::EventStream,
 	) -> iced::advanced::graphics::futures::BoxStream<Self::Output> {
-		let stream = unfold((self.frame_tracker.clone(), input), |(state, mut event_stream)| async move {
+		let stream = unfold((self, input), |(state, mut event_stream)| async move {
 			let output = loop {
 				if let Some(iced::advanced::subscription::Event::Interaction {
-					event: iced::Event::Window(iced::window::Event::RedrawRequested(_)),
+					event: iced::Event::Window(iced::window::Event::RedrawRequested(now)),
 					..
 				}) = event_stream.next().await
 				{
-					let lock = state.lock().unwrap();
+					let tracker = state.frame_tracker.lock().unwrap();
 
-					if lock.is_empty() {
+					if tracker.is_empty() {
 						continue;
 					} else {
-						break lock.iter().filter(|(_, frame)| matches!(frame, [true, false])).map(|(id, _)| *id).collect::<Vec<_>>();
+						let hidden = tracker
+							.iter()
+							.filter(|(_, last_rendered)| (now - **last_rendered) >= state.persist_duration)
+							.map(|(id, _)| *id)
+							.collect::<Vec<_>>();
+
+						if !hidden.is_empty() {
+							break hidden;
+						}
 					};
 				}
 			};

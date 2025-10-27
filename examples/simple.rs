@@ -1,4 +1,5 @@
 use iced::widget;
+use std::time;
 
 #[derive(Debug, Clone)]
 enum Message {
@@ -66,14 +67,14 @@ fn main() {
 		widget::column![widget::row![
 			widget::text_input("Enter a URL to open", state.url_input.as_str()).on_input(Message::EditUrlInput),
 			widget::button("Go To").on_press_maybe((!state.url_input.is_empty()).then_some(Message::CreateView)),
-			widget::button(if state.webview_visible { "Hide Webview" } else { "Show Webview" }).on_press(Message::ToggleWebview),
+			widget::button(if state.webview_visible && state.webview.is_some() { "Hide Webview" } else { "Show Webview" }).on_press(Message::ToggleWebview),
 		]]
 		.push_maybe(state.webview_visible.then(|| state.webview.as_ref().map(|w| w.view(iced::Length::Fill, iced::Length::Fill))).flatten())
 		.push_maybe((!state.webview_visible).then_some(widget::text("Webview Not Displayed :)")))
 	}
 
 	fn subscription<'a>(state: &'a State) -> iced::Subscription<Message> {
-		state.webview_manager.subscription().map(Message::IcedWryMessage)
+		state.webview_manager.subscription(time::Duration::from_millis(25)).map(Message::IcedWryMessage)
 	}
 
 	iced::daemon::<_, Message, iced::Theme, iced::Renderer>("Simple Webview Test", update, view)

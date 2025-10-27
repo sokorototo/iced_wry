@@ -2,7 +2,7 @@ mod message;
 mod subscription;
 
 pub use message::IcedWryMessage;
-use std::{cell, collections, sync};
+use std::{cell, collections, sync, time};
 pub use wry;
 
 thread_local! {
@@ -15,8 +15,8 @@ pub struct IcedWebviewManager {
 	// simply used to differentiate between subscriptions
 	manager_id: usize,
 	webviews: collections::BTreeMap<usize, sync::Weak<wry::WebView>>,
-	// tracks the last active frame when a webview was rendered, hiding any webviews where the last active frame is lower than the current active frame
-	display_tracker: sync::Arc<sync::Mutex<collections::BTreeMap<usize, [bool; 2]>>>,
+	// tracks the last moment a webview was rendered, and hides it if the instant has past by a set duration
+	display_tracker: sync::Arc<sync::Mutex<collections::BTreeMap<usize, time::Instant>>>,
 }
 
 impl IcedWebviewManager {
@@ -94,11 +94,6 @@ impl IcedWebviewManager {
 
 		self.webviews.insert(webview_id, sync::Arc::downgrade(&webview));
 
-		// setup frame persistence state
-		if let Ok(mut guard) = self.display_tracker.lock() {
-			guard.entry(webview_id).and_modify(|s| *s = [false, false]).or_insert([false, false]);
-		};
-
 		Some(IcedWebview {
 			webview,
 			id: webview_id,
@@ -106,10 +101,14 @@ impl IcedWebviewManager {
 		})
 	}
 
-	/// Subscription that runs every frame, and syncs visibility and bounds for managed overlays
-	pub fn subscription(&self) -> iced::Subscription<message::IcedWryMessage> {
+	/// Subscription that runs every frame and automatically hides webviews that haven't been rendered for [`persist_duration`]
+	pub fn subscription(
+		&self,
+		persist_duration: time::Duration,
+	) -> iced::Subscription<message::IcedWryMessage> {
 		let tracker = self.display_tracker.clone();
 		let recipe = subscription::VisibilityUpdater {
+			persist_duration,
 			id: self.manager_id,
 			frame_tracker: tracker,
 		};
@@ -142,7 +141,7 @@ impl IcedWebviewManager {
 
 pub struct IcedWebview {
 	webview: sync::Arc<wry::WebView>,
-	tracker: sync::Arc<sync::Mutex<collections::BTreeMap<usize, [bool; 2]>>>,
+	tracker: sync::Arc<sync::Mutex<collections::BTreeMap<usize, time::Instant>>>,
 	id: usize,
 }
 
@@ -213,21 +212,38 @@ impl<'a, Message, Theme, R: iced::advanced::Renderer> iced::advanced::Widget<Mes
 			eprintln!("Unable to set bounds for webview with id: {}\n{}", self.inner.id, err)
 		};
 
+		if let Err(err) = self.inner.as_ref().set_visible(true) {
+			eprintln!("Unable to update visibility for webview with id: {}\n{}", self.inner.id, err)
+		};
+	}
+
+	fn on_event(
+		&mut self,
+		_state: &mut iced::advanced::widget::Tree,
+		event: iced::Event,
+		_layout: iced::advanced::Layout<'_>,
+		_cursor: iced::advanced::mouse::Cursor,
+		_renderer: &R,
+		_clipboard: &mut dyn iced::advanced::Clipboard,
+		_shell: &mut iced::advanced::Shell<'_, Message>,
+		_viewport: &iced::Rectangle,
+	) -> iced::advanced::graphics::core::event::Status {
+		let iced::Event::Window(iced::window::Event::RedrawRequested(instant)) = event else {
+			return iced::advanced::graphics::core::event::Status::Ignored;
+		};
+
 		if let Ok(mut guard) = self.inner.tracker.lock() {
 			guard
 				.entry(self.inner.id)
 				.and_modify(|s| {
-					s.swap(0, 1);
-					s[1] = true;
+					*s = instant;
 				})
-				.or_insert([false, true]);
+				.or_insert(instant);
 		} else {
 			eprintln!("Unable to acquire lock for internal Arc<Mutex> tracker")
 		};
 
-		if let Err(err) = self.inner.as_ref().set_visible(true) {
-			eprintln!("Unable to update visibility for webview with id: {}\n{}", self.inner.id, err)
-		};
+		iced::advanced::graphics::core::event::Status::Ignored
 	}
 }
 
