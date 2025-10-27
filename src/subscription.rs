@@ -1,11 +1,11 @@
-use iced::futures::{StreamExt, stream::unfold};
+use iced::futures::*;
 use std::{collections, hash::Hasher, sync, time};
 
 use crate::*;
 
 pub(crate) struct VisibilityUpdater {
-	pub(crate) persist_duration: time::Duration,
 	pub(crate) id: usize,
+	pub(crate) persist_duration: time::Duration,
 	pub(crate) frame_tracker: sync::Arc<sync::Mutex<collections::BTreeMap<usize, time::Instant>>>,
 }
 
@@ -24,8 +24,13 @@ impl iced::advanced::subscription::Recipe for VisibilityUpdater {
 		self: Box<Self>,
 		input: iced::advanced::subscription::EventStream,
 	) -> iced::advanced::graphics::futures::BoxStream<Self::Output> {
-		let stream = unfold((self, input), |(state, mut event_stream)| async move {
-			let output = loop {
+		let debouncer = collections::BTreeSet::new();
+
+		let stream = stream::unfold((self, input, debouncer), |(state, mut event_stream, mut debouncer)| async move {
+			// stores any frames to be hidden
+			let mut output = Vec::new();
+
+			loop {
 				if let Some(iced::advanced::subscription::Event::Interaction {
 					event: iced::Event::Window(iced::window::Event::RedrawRequested(now)),
 					..
@@ -36,20 +41,31 @@ impl iced::advanced::subscription::Recipe for VisibilityUpdater {
 					if tracker.is_empty() {
 						continue;
 					} else {
-						let hidden = tracker
-							.iter()
-							.filter(|(_, last_rendered)| (now - **last_rendered) >= state.persist_duration)
-							.map(|(id, _)| *id)
-							.collect::<Vec<_>>();
+						for (id, last_render) in tracker.iter() {
+							// if a webview is already set as hidden, avoid resending it to be hidden
+							match (now - *last_render) >= state.persist_duration {
+								true => {
+									if debouncer.contains(id) {
+										continue;
+									} else {
+										output.push(*id);
+										debouncer.insert(*id);
+									}
+								}
+								false => {
+									debouncer.remove(id);
+								}
+							}
+						}
 
-						if !hidden.is_empty() {
-							break hidden;
+						if !output.is_empty() {
+							break;
 						}
 					};
 				}
-			};
+			}
 
-			Some((message::IcedWryMessage::HideWebviews(output), (state, event_stream)))
+			Some((message::IcedWryMessage::HideWebviews(output), (state, event_stream, debouncer)))
 		});
 
 		Box::pin(stream)
