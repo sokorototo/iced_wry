@@ -7,7 +7,6 @@ pub(crate) struct VisibilityUpdater {
 	pub(crate) id: usize,
 	pub(crate) persist_duration: time::Duration,
 	pub(crate) frame_tracker: sync::Arc<sync::Mutex<collections::BTreeMap<usize, time::Instant>>>,
-	pub(crate) abort_controller: sync::Arc<sync::Mutex<bool>>,
 }
 
 impl iced::advanced::subscription::Recipe for VisibilityUpdater {
@@ -28,14 +27,6 @@ impl iced::advanced::subscription::Recipe for VisibilityUpdater {
 		let debouncer = collections::BTreeSet::new();
 
 		let stream = stream::unfold((self, input, debouncer), |(state, mut event_stream, mut debouncer)| async move {
-			{
-				// exit if abort controller is set to false
-				let ctl = state.abort_controller.lock().unwrap();
-				if !*ctl {
-					return None;
-				}
-			}
-
 			// contains webviews which shouldn't be rendered
 			let mut expired = Vec::new();
 

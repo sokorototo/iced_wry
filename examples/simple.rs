@@ -22,7 +22,11 @@ struct State {
 
 fn main() {
 	fn new() -> (State, iced::Task<Message>) {
-		let open_window_task = iced::window::open(iced::window::Settings { ..Default::default() }).1;
+		let open_window_task = iced::window::open(iced::window::Settings {
+			size: iced::Size { width: 800.0, height: 800.0 },
+			..Default::default()
+		})
+		.1;
 		(
 			State {
 				url_input: Default::default(),

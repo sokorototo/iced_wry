@@ -116,7 +116,6 @@ impl IcedWebviewManager {
 			persist_duration,
 			id: self.manager_id,
 			frame_tracker: tracker,
-			abort_controller: sync::Arc::clone(&self.subscription_ctl),
 		};
 
 		iced::advanced::subscription::from_recipe(recipe)
