@@ -7,6 +7,7 @@ pub(crate) struct VisibilityUpdater {
 	pub(crate) id: usize,
 	pub(crate) persist_duration: time::Duration,
 	pub(crate) frame_tracker: sync::Arc<sync::Mutex<collections::BTreeMap<usize, time::Instant>>>,
+	pub(crate) abort_controller: sync::Arc<sync::Mutex<bool>>,
 }
 
 impl iced::advanced::subscription::Recipe for VisibilityUpdater {
@@ -27,8 +28,16 @@ impl iced::advanced::subscription::Recipe for VisibilityUpdater {
 		let debouncer = collections::BTreeSet::new();
 
 		let stream = stream::unfold((self, input, debouncer), |(state, mut event_stream, mut debouncer)| async move {
-			// stores any frames to be hidden
-			let mut output = Vec::new();
+			{
+				// exit if abort controller is set to false
+				let ctl = state.abort_controller.lock().unwrap();
+				if !*ctl {
+					return None;
+				}
+			}
+
+			// contains webviews which shouldn't be rendered
+			let mut expired = Vec::new();
 
 			loop {
 				if let Some(iced::advanced::subscription::Event::Interaction {
@@ -48,7 +57,7 @@ impl iced::advanced::subscription::Recipe for VisibilityUpdater {
 									if debouncer.contains(id) {
 										continue;
 									} else {
-										output.push(*id);
+										expired.push(*id);
 										debouncer.insert(*id);
 									}
 								}
@@ -58,14 +67,14 @@ impl iced::advanced::subscription::Recipe for VisibilityUpdater {
 							}
 						}
 
-						if !output.is_empty() {
+						if !expired.is_empty() {
 							break;
 						}
 					};
 				}
 			}
 
-			Some((message::IcedWryMessage::HideWebviews(output), (state, event_stream, debouncer)))
+			Some((message::IcedWryMessage::HideWebviews(expired), (state, event_stream, debouncer)))
 		});
 
 		Box::pin(stream)

@@ -1,3 +1,6 @@
+#![deny(missing_docs)]
+#![doc = include_str!("../README.md")]
+
 mod message;
 mod subscription;
 
@@ -10,13 +13,14 @@ thread_local! {
 }
 
 /// Stores state for synchronizing visibility and bounds for any managed [`webviews`](wry::WebView)
-#[derive(Debug, Clone)]
+#[derive(Debug)]
 pub struct IcedWebviewManager {
 	// simply used to differentiate between subscriptions
 	manager_id: usize,
 	webviews: collections::BTreeMap<usize, sync::Weak<wry::WebView>>,
 	// tracks the last moment a webview was rendered, and hides it if the instant has past by a set duration
 	display_tracker: sync::Arc<sync::Mutex<collections::BTreeMap<usize, time::Instant>>>,
+	subscription_ctl: sync::Arc<sync::Mutex<bool>>,
 }
 
 impl IcedWebviewManager {
@@ -31,6 +35,7 @@ impl IcedWebviewManager {
 			manager_id: IcedWebviewManager::increment_id(),
 			webviews: collections::BTreeMap::new(),
 			display_tracker: sync::Arc::new(sync::Mutex::new(collections::BTreeMap::new())),
+			subscription_ctl: sync::Arc::new(sync::Mutex::new(true)),
 		}
 	}
 
@@ -111,6 +116,7 @@ impl IcedWebviewManager {
 			persist_duration,
 			id: self.manager_id,
 			frame_tracker: tracker,
+			abort_controller: sync::Arc::clone(&self.subscription_ctl),
 		};
 
 		iced::advanced::subscription::from_recipe(recipe)
@@ -139,6 +145,15 @@ impl IcedWebviewManager {
 	}
 }
 
+impl Drop for IcedWebviewManager {
+	fn drop(&mut self) {
+		//set abort controller to false
+		let mut ctl = self.subscription_ctl.lock().unwrap();
+		*ctl = false;
+	}
+}
+
+/// Contains state necessary for layout and display of a specific webview
 pub struct IcedWebview {
 	webview: sync::Arc<wry::WebView>,
 	tracker: sync::Arc<sync::Mutex<collections::BTreeMap<usize, time::Instant>>>,
