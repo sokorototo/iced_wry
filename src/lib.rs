@@ -45,7 +45,7 @@ impl IcedWebviewManager {
 	}
 
 	/// Pass [`None`] to use the main window. If no window is active, Task never yields
-	pub fn acquire_window_handle(window_id: Option<iced::window::Id>) -> iced::Task<ExtractedWindowId> {
+	pub fn extract_window_id(window_id: Option<iced::window::Id>) -> iced::Task<ExtractedWindowId> {
 		if let Some(id) = window_id {
 			if WINDOW_HANDLES.with_borrow_mut(move |handles| handles.contains_key(&id)) {
 				return iced::Task::done(ExtractedWindowId(id));
@@ -77,7 +77,7 @@ impl IcedWebviewManager {
 		}
 	}
 
-	/// Use the [`usize`] yielded by [`acquire_window_handle`] to spawn a webview
+	/// Use the [`usize`] yielded by [`extract_window_id`](IcedWebviewManager::extract_window_id) to spawn a webview
 	pub fn new_webview(
 		&mut self,
 		mut attrs: wry::WebViewAttributes<'static>,
@@ -86,7 +86,7 @@ impl IcedWebviewManager {
 		attrs.visible = false;
 		attrs.focused = false;
 
-		// acquire window handle
+		// extract the window handle
 		let result = WINDOW_HANDLES.with_borrow_mut(move |w| {
 			w.get(&window_id.0).map(|raw| {
 				let window_handle = unsafe { iced::window::raw_window_handle::WindowHandle::borrow_raw(*raw) };

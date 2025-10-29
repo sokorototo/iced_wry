@@ -48,7 +48,7 @@ fn main() {
 			Message::EditUrlInput(chars) => {
 				state.url_input = chars;
 			}
-			Message::CreateView => return iced_wry::IcedWebviewManager::acquire_window_handle(state.main_window).map(Message::ExtractedWindowHandle),
+			Message::CreateView => return iced_wry::IcedWebviewManager::extract_window_id(state.main_window).map(Message::ExtractedWindowHandle),
 			Message::ToggleWebview => state.webview_visible = !state.webview_visible,
 			Message::ExtractedWindowHandle(id) => {
 				let mut attributes = iced_wry::wry::WebViewAttributes::default();
