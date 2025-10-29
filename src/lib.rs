@@ -289,13 +289,3 @@ impl<'a, Message, Theme, R: iced::advanced::Renderer> iced::advanced::Widget<Mes
 		iced::advanced::graphics::core::event::Status::Ignored
 	}
 }
-
-impl<'a> Drop for IcedWebviewContainerElement<'a> {
-	fn drop(&mut self) {
-		if let Some(webview) = sync::Weak::upgrade(&self.inner.webview) {
-			if let Err(err) = webview.focus_parent() {
-				eprintln!("Unable to focus parent for webview with id: {}\n{}", self.inner.id, err)
-			};
-		}
-	}
-}
