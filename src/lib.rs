@@ -138,6 +138,7 @@ impl IcedWebviewManager {
 			message::IcedWryMessage::HideWebviews(ids) => {
 				for id in ids {
 					if let Some(webview) = self.webviews.get(&id) {
+						let _ = webview.focus_parent();
 						if let Err(err) = webview.set_visible(false) {
 							eprintln!("Unable to update visibility for webview with id: {}\n{}", id, err)
 						};
