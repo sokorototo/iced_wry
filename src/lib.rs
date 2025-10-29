@@ -13,11 +13,10 @@ thread_local! {
 }
 
 /// Stores state for synchronizing visibility and bounds for any managed [`webviews`](wry::WebView)
-#[derive(Debug)]
 pub struct IcedWebviewManager {
 	// simply used to differentiate between subscriptions
 	manager_id: usize,
-	webviews: collections::BTreeMap<usize, sync::Weak<wry::WebView>>,
+	webviews: collections::BTreeMap<usize, sync::Arc<wry::WebView>>,
 	// tracks the last moment a webview was rendered, and hides it if the instant has past by a set duration
 	display_tracker: sync::Arc<sync::Mutex<collections::BTreeMap<usize, time::Instant>>>,
 	subscription_ctl: sync::Arc<sync::Mutex<bool>>,
@@ -106,10 +105,10 @@ impl IcedWebviewManager {
 		let webview_id = IcedWebviewManager::increment_id();
 		let webview = sync::Arc::new(webview);
 
-		self.webviews.insert(webview_id, sync::Arc::downgrade(&webview));
+		self.webviews.insert(webview_id, sync::Arc::clone(&webview));
 
 		Some(IcedWebview {
-			webview,
+			webview: sync::Arc::downgrade(&webview),
 			id: webview_id,
 			tracker: self.display_tracker.clone(),
 		})
@@ -138,17 +137,23 @@ impl IcedWebviewManager {
 		match msg {
 			message::IcedWryMessage::HideWebviews(ids) => {
 				for id in ids {
-					if let Some(weak) = self.webviews.get(&id) {
-						if let Some(webview) = weak.upgrade() {
-							if let Err(err) = webview.set_visible(false) {
-								eprintln!("Unable to update visibility for webview with id: {}\n{}", id, err)
-							};
-						}
+					if let Some(webview) = self.webviews.get(&id) {
+						if let Err(err) = webview.set_visible(false) {
+							eprintln!("Unable to update visibility for webview with id: {}\n{}", id, err)
+						};
 					} else {
 						eprintln!("Unable to find webview with id: {}", id)
 					}
 				}
 			}
+		}
+	}
+
+	/// Completely resets the manager's internal state
+	pub fn reset(&mut self) {
+		self.webviews.clear();
+		if let Ok(mut tracker) = self.display_tracker.lock() {
+			tracker.clear();
 		}
 	}
 }
@@ -163,7 +168,7 @@ impl Drop for IcedWebviewManager {
 
 /// Contains state necessary for layout and display of a specific webview
 pub struct IcedWebview {
-	webview: sync::Arc<wry::WebView>,
+	webview: sync::Weak<wry::WebView>,
 	tracker: sync::Arc<sync::Mutex<collections::BTreeMap<usize, time::Instant>>>,
 	id: usize,
 }
@@ -182,12 +187,6 @@ impl IcedWebview {
 		};
 
 		iced::Element::new(inner)
-	}
-}
-
-impl AsRef<wry::WebView> for IcedWebview {
-	fn as_ref(&self) -> &wry::WebView {
-		&self.webview
 	}
 }
 
@@ -224,18 +223,23 @@ impl<'a, Message, Theme, R: iced::advanced::Renderer> iced::advanced::Widget<Mes
 		_cursor: iced::advanced::mouse::Cursor,
 		_viewport: &iced::Rectangle,
 	) {
-		let bounds = layout.bounds();
-		let rect = wry::Rect {
-			position: wry::dpi::Position::Logical(wry::dpi::LogicalPosition::new(bounds.x.into(), bounds.y.into())),
-			size: wry::dpi::LogicalSize::<f64>::new(bounds.width.into(), bounds.height.into()).into(),
-		};
+		if let Some(webview) = sync::Weak::upgrade(&self.inner.webview) {
+			let bounds = layout.bounds();
+			let rect = wry::Rect {
+				position: wry::dpi::Position::Logical(wry::dpi::LogicalPosition::new(bounds.x.into(), bounds.y.into())),
+				size: wry::dpi::LogicalSize::<f64>::new(bounds.width.into(), bounds.height.into()).into(),
+			};
 
-		if let Err(err) = self.inner.as_ref().set_bounds(rect) {
-			eprintln!("Unable to set bounds for webview with id: {}\n{}", self.inner.id, err)
-		};
+			// update overlay state
+			if let Err(err) = webview.set_bounds(rect) {
+				eprintln!("Unable to set bounds for webview with id: {}\n{}", self.inner.id, err)
+			};
 
-		if let Err(err) = self.inner.as_ref().set_visible(true) {
-			eprintln!("Unable to update visibility for webview with id: {}\n{}", self.inner.id, err)
+			if let Err(err) = webview.set_visible(true) {
+				eprintln!("Unable to update visibility for webview with id: {}\n{}", self.inner.id, err)
+			};
+		} else {
+			eprintln!("Attempted to render webview, when WebviewManager was already dropped")
 		};
 	}
 
@@ -243,8 +247,8 @@ impl<'a, Message, Theme, R: iced::advanced::Renderer> iced::advanced::Widget<Mes
 		&mut self,
 		_state: &mut iced::advanced::widget::Tree,
 		event: iced::Event,
-		_layout: iced::advanced::Layout<'_>,
-		_cursor: iced::advanced::mouse::Cursor,
+		layout: iced::advanced::Layout<'_>,
+		cursor: iced::advanced::mouse::Cursor,
 		_renderer: &R,
 		_clipboard: &mut dyn iced::advanced::Clipboard,
 		_shell: &mut iced::advanced::Shell<'_, Message>,
@@ -253,8 +257,15 @@ impl<'a, Message, Theme, R: iced::advanced::Renderer> iced::advanced::Widget<Mes
 		let instant = match event {
 			iced::Event::Window(iced::window::Event::RedrawRequested(instant)) => instant,
 			iced::Event::Mouse(iced::mouse::Event::ButtonPressed(..)) => {
-				if let Err(err) = self.inner.webview.focus_parent() {
-					eprintln!("Unable to focus parent for webview with id: {}\n{}", self.inner.id, err)
+				let bounds = layout.bounds();
+				if let Some(pos) = cursor.position() {
+					if !bounds.contains(pos) {
+						if let Some(webview) = sync::Weak::upgrade(&self.inner.webview) {
+							if let Err(err) = webview.focus_parent() {
+								eprintln!("Unable to focus parent for webview with id: {}\n{}", self.inner.id, err)
+							};
+						}
+					}
 				};
 
 				return iced::advanced::graphics::core::event::Status::Ignored;
@@ -281,8 +292,10 @@ impl<'a, Message, Theme, R: iced::advanced::Renderer> iced::advanced::Widget<Mes
 
 impl<'a> Drop for IcedWebviewContainerElement<'a> {
 	fn drop(&mut self) {
-		if let Err(err) = self.inner.webview.focus_parent() {
-			eprintln!("Unable to focus parent for webview with id: {}\n{}", self.inner.id, err)
-		};
+		if let Some(webview) = sync::Weak::upgrade(&self.inner.webview) {
+			if let Err(err) = webview.focus_parent() {
+				eprintln!("Unable to focus parent for webview with id: {}\n{}", self.inner.id, err)
+			};
+		}
 	}
 }
