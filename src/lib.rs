@@ -9,7 +9,7 @@ use std::{cell, collections, sync, time};
 pub use wry;
 
 thread_local! {
-	static WINDOW_HANDLES: cell::RefCell<collections::BTreeMap<usize, iced::window::raw_window_handle::RawWindowHandle>> = cell::RefCell::new(collections::BTreeMap::new());
+	static WINDOW_HANDLES: cell::RefCell<collections::BTreeMap<iced::window::Id, iced::window::raw_window_handle::RawWindowHandle>> = cell::RefCell::new(collections::BTreeMap::new());
 }
 
 /// Stores state for synchronizing visibility and bounds for any managed [`webviews`](wry::WebView)
@@ -22,6 +22,11 @@ pub struct IcedWebviewManager {
 	display_tracker: sync::Arc<sync::Mutex<collections::BTreeMap<usize, time::Instant>>>,
 	subscription_ctl: sync::Arc<sync::Mutex<bool>>,
 }
+
+/// Wraps a [`Id`](iced::window::Id), this is necessary as `iced_wry` needs to extract the [`WindowHandle`](iced::window::raw_window_handle) from the iced runtime
+#[repr(transparent)]
+#[derive(Debug, Clone)]
+pub struct ExtractedWindowId(iced::window::Id);
 
 impl IcedWebviewManager {
 	pub(crate) fn increment_id() -> usize {
@@ -40,28 +45,32 @@ impl IcedWebviewManager {
 	}
 
 	/// Pass [`None`] to use the main window. If no window is active, Task never yields
-	pub fn acquire_window_handle(window_id: Option<iced::window::Id>) -> iced::Task<usize> {
-		let _id = IcedWebviewManager::increment_id();
+	pub fn acquire_window_handle(window_id: Option<iced::window::Id>) -> iced::Task<ExtractedWindowId> {
+		if let Some(id) = window_id {
+			if WINDOW_HANDLES.with_borrow_mut(move |handles| handles.contains_key(&id)) {
+				return iced::Task::done(ExtractedWindowId(id));
+			};
+		}
 
 		match window_id {
 			Some(id) => iced::window::run_with_handle(id, move |handle| {
 				let raw = handle.as_raw();
 
 				WINDOW_HANDLES.with_borrow_mut(move |handles| {
-					let _ = handles.insert(_id, raw);
+					let _ = handles.insert(id, raw);
 				});
 
-				_id
+				ExtractedWindowId(id)
 			}),
 			None => iced::window::get_oldest().then(move |id| match id {
 				Some(id) => iced::window::run_with_handle(id, move |handle| {
 					let raw = handle.as_raw();
 
 					WINDOW_HANDLES.with_borrow_mut(move |handles| {
-						let _ = handles.insert(_id, raw);
+						let _ = handles.insert(id, raw);
 					});
 
-					_id
+					ExtractedWindowId(id)
 				}),
 				None => iced::Task::none(),
 			}),
@@ -72,14 +81,14 @@ impl IcedWebviewManager {
 	pub fn new_webview(
 		&mut self,
 		mut attrs: wry::WebViewAttributes<'static>,
-		window_id: usize,
+		window_id: ExtractedWindowId,
 	) -> Option<IcedWebview> {
 		attrs.visible = false;
 		attrs.focused = false;
 
 		// acquire window handle
 		let result = WINDOW_HANDLES.with_borrow_mut(move |w| {
-			w.get(&window_id).map(|raw| {
+			w.get(&window_id.0).map(|raw| {
 				let window_handle = unsafe { iced::window::raw_window_handle::WindowHandle::borrow_raw(*raw) };
 				wry::WebView::new_as_child(&window_handle, attrs)
 			})

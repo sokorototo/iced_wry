@@ -7,7 +7,7 @@ enum Message {
 	CreateView,
 	ToggleWebview,
 	CreatedMainWindow(iced::window::Id),
-	ExtractedWindowHandle(usize),
+	ExtractedWindowHandle(iced_wry::ExtractedWindowId),
 	IcedWryMessage(iced_wry::IcedWryMessage),
 }
 
