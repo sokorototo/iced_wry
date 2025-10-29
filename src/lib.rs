@@ -216,7 +216,6 @@ impl<'a, Message, Theme, R: iced::advanced::Renderer> iced::advanced::Widget<Mes
 		_viewport: &iced::Rectangle,
 	) {
 		let bounds = layout.bounds();
-
 		let rect = wry::Rect {
 			position: wry::dpi::Position::Logical(wry::dpi::LogicalPosition::new(bounds.x.into(), bounds.y.into())),
 			size: wry::dpi::LogicalSize::<f64>::new(bounds.width.into(), bounds.height.into()).into(),
@@ -242,8 +241,18 @@ impl<'a, Message, Theme, R: iced::advanced::Renderer> iced::advanced::Widget<Mes
 		_shell: &mut iced::advanced::Shell<'_, Message>,
 		_viewport: &iced::Rectangle,
 	) -> iced::advanced::graphics::core::event::Status {
-		let iced::Event::Window(iced::window::Event::RedrawRequested(instant)) = event else {
-			return iced::advanced::graphics::core::event::Status::Ignored;
+		let instant = match event {
+			iced::Event::Window(iced::window::Event::RedrawRequested(instant)) => instant,
+			iced::Event::Mouse(iced::mouse::Event::ButtonPressed(..)) => {
+				if let Err(err) = self.inner.webview.focus_parent() {
+					eprintln!("Unable to focus parent for webview with id: {}\n{}", self.inner.id, err)
+				};
+
+				return iced::advanced::graphics::core::event::Status::Ignored;
+			}
+			_ => {
+				return iced::advanced::graphics::core::event::Status::Ignored;
+			}
 		};
 
 		if let Ok(mut guard) = self.inner.tracker.lock() {
