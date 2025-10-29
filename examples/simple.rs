@@ -25,8 +25,8 @@ fn main() {
 		let open_window_task = iced::window::open(iced::window::Settings {
 			size: iced::Size { width: 800.0, height: 800.0 },
 			..Default::default()
-		})
-		.1;
+		});
+
 		(
 			State {
 				url_input: Default::default(),
@@ -36,7 +36,7 @@ fn main() {
 				webview: Default::default(),
 				webview_visible: true,
 			},
-			open_window_task.map(Message::CreatedMainWindow),
+			open_window_task.1.map(Message::CreatedMainWindow),
 		)
 	}
 
