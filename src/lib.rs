@@ -169,7 +169,8 @@ impl Drop for IcedWebviewManager {
 
 /// Contains state necessary for layout and display of a specific webview
 pub struct IcedWebview {
-	webview: sync::Weak<wry::WebView>,
+	/// A weak reference to the internal webview. If the manager is dropped, `Weak::upgrade` will yield `None`
+	pub webview: sync::Weak<wry::WebView>,
 	tracker: sync::Arc<sync::Mutex<collections::BTreeMap<usize, time::Instant>>>,
 	id: usize,
 }
