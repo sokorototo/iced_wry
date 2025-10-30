@@ -150,11 +150,18 @@ impl IcedWebviewManager {
 		}
 	}
 
-	/// Completely resets the manager's internal state
-	pub fn reset(&mut self) {
-		self.webviews.clear();
-		if let Ok(mut tracker) = self.display_tracker.lock() {
-			tracker.clear();
+	/// Clears any state stored for the given Webview
+	pub fn clear_view(
+		&mut self,
+		webview: &IcedWebview,
+	) {
+		if let Some(wv) = self.webviews.remove(&webview.id) {
+			let _ = wv.set_visible(false);
+			let _ = wv.focus_parent();
+		}
+
+		if let Ok(mut guard) = self.display_tracker.lock() {
+			let _ = guard.remove(&webview.id);
 		}
 	}
 }
