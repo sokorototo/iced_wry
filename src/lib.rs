@@ -35,6 +35,21 @@ impl IcedWebviewManager {
 
 	/// Instantiate a new manager cuz
 	pub fn new() -> IcedWebviewManager {
+		#[cfg(any(target_os = "linux"))]
+		{
+			use gtk::prelude::DisplayExtManual;
+
+			gtk::init().unwrap();
+			if gtk::gdk::Display::default().unwrap().backend().is_wayland() {
+				panic!("iced_wry doesn't support wayland! Set WINIT_UNIX_BACKEND=\"x11\"");
+			}
+
+			winit::platform::x11::register_xlib_error_hook(Box::new(|_display, error| {
+				let error = error as *mut x11_dl::xlib::XErrorEvent;
+				(unsafe { (*error).error_code }) == 170
+			}));
+		}
+
 		IcedWebviewManager {
 			manager_id: IcedWebviewManager::increment_id(),
 			webviews: collections::BTreeMap::new(),

@@ -14,6 +14,11 @@ wry = { version = "0.53", default-features = false, features = [
 ] }
 iced = { version = "0.13", default-features = false, features = ["advanced"] }
 
+
+[target.'cfg(target_os = "linux")'.dependencies]
+gtk = { version = "*", default-features = false }
+winit = { version = "*", default-features = false, features = ["x11"] }
+
 [dev-dependencies]
 iced = { version = "0.13", default-features = false, features = [
 	"advanced",
