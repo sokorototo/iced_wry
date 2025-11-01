@@ -1472,6 +1472,7 @@ dependencies = [
  "iced",
  "winit",
  "wry",
+ "x11-dl",
 ]
 
 [[package]]

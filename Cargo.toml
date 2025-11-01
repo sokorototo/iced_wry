@@ -18,6 +18,7 @@ iced = { version = "0.13", default-features = false, features = ["advanced"] }
 [target.'cfg(target_os = "linux")'.dependencies]
 gtk = { version = "*", default-features = false }
 winit = { version = "*", default-features = false, features = ["x11"] }
+x11-dl = "2.21.0"
 
 [dev-dependencies]
 iced = { version = "0.13", default-features = false, features = [
