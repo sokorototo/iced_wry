@@ -7,13 +7,8 @@ version = "0.1.0"
 edition = "2024"
 
 [dependencies]
-wry = { version = "0.53", default-features = false, features = [
-	"os-webview",
-	"drag-drop",
-	"protocol",
-] }
+wry = "0.53"
 iced = { version = "0.13", default-features = false, features = ["advanced"] }
-
 
 [target.'cfg(target_os = "linux")'.dependencies]
 gtk = { version = "*", default-features = false }
