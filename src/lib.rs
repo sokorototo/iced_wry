@@ -41,13 +41,13 @@ impl IcedWebviewManager {
 
 			gtk::init().unwrap();
 			if gtk::gdk::Display::default().unwrap().backend().is_wayland() {
-				panic!("iced_wry doesn't support wayland! Set WINIT_UNIX_BACKEND=\"x11\"");
+				// panic!("iced_wry doesn't support wayland! Set WINIT_UNIX_BACKEND=\"x11\"");
+			} else {
+				winit::platform::x11::register_xlib_error_hook(Box::new(|_display, error| {
+					let error = error as *mut x11_dl::xlib::XErrorEvent;
+					(unsafe { (*error).error_code }) == 170
+				}));
 			}
-
-			winit::platform::x11::register_xlib_error_hook(Box::new(|_display, error| {
-				let error = error as *mut x11_dl::xlib::XErrorEvent;
-				(unsafe { (*error).error_code }) == 170
-			}));
 		}
 
 		IcedWebviewManager {

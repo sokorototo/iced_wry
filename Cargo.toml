@@ -9,6 +9,7 @@ edition = "2024"
 [dependencies]
 wry = "0.53"
 iced = { version = "0.13", default-features = false, features = ["advanced"] }
+winit = { version = "*", features = ["wayland"] }
 
 [target.'cfg(target_os = "linux")'.dependencies]
 gtk = { version = "*", default-features = false }
