@@ -67,8 +67,8 @@ impl IcedWebviewManager {
 		}
 
 		match window_id {
-			Some(id) => iced::window::run_with_handle(id, move |handle| {
-				let raw = handle.as_raw();
+			Some(id) => iced::window::run(id, move |handle| {
+				let raw = handle.window_handle().unwrap().as_raw();
 
 				WINDOW_HANDLES.with_borrow_mut(move |handles| {
 					let _ = handles.insert(id, raw);
@@ -76,9 +76,9 @@ impl IcedWebviewManager {
 
 				ExtractedWindowId(id)
 			}),
-			None => iced::window::get_oldest().then(move |id| match id {
-				Some(id) => iced::window::run_with_handle(id, move |handle| {
-					let raw = handle.as_raw();
+			None => iced::window::oldest().then(move |id| match id {
+				Some(id) => iced::window::run(id, move |handle| {
+					let raw = handle.window_handle().unwrap().as_raw();
 
 					WINDOW_HANDLES.with_borrow_mut(move |handles| {
 						let _ = handles.insert(id, raw);
@@ -229,7 +229,7 @@ impl<'a, Message, Theme, R: iced::advanced::Renderer> iced::advanced::Widget<Mes
 	}
 
 	fn layout(
-		&self,
+		&mut self,
 		_tree: &mut iced::advanced::widget::Tree,
 		_renderer: &R,
 		limits: &iced::advanced::layout::Limits,
@@ -267,17 +267,17 @@ impl<'a, Message, Theme, R: iced::advanced::Renderer> iced::advanced::Widget<Mes
 		};
 	}
 
-	fn on_event(
+	fn update(
 		&mut self,
 		_state: &mut iced::advanced::widget::Tree,
-		event: iced::Event,
+		event: &iced::Event,
 		layout: iced::advanced::Layout<'_>,
 		cursor: iced::advanced::mouse::Cursor,
 		_renderer: &R,
 		_clipboard: &mut dyn iced::advanced::Clipboard,
 		_shell: &mut iced::advanced::Shell<'_, Message>,
 		_viewport: &iced::Rectangle,
-	) -> iced::advanced::graphics::core::event::Status {
+	) {
 		let instant = match event {
 			iced::Event::Window(iced::window::Event::RedrawRequested(instant)) => instant,
 			iced::Event::Mouse(iced::mouse::Event::ButtonPressed(..)) => {
@@ -292,10 +292,10 @@ impl<'a, Message, Theme, R: iced::advanced::Renderer> iced::advanced::Widget<Mes
 					}
 				};
 
-				return iced::advanced::graphics::core::event::Status::Ignored;
+				return;
 			}
 			_ => {
-				return iced::advanced::graphics::core::event::Status::Ignored;
+				return;
 			}
 		};
 
@@ -303,13 +303,11 @@ impl<'a, Message, Theme, R: iced::advanced::Renderer> iced::advanced::Widget<Mes
 			guard
 				.entry(self.inner.id)
 				.and_modify(|s| {
-					*s = instant;
+					*s = *instant;
 				})
-				.or_insert(instant);
+				.or_insert(*instant);
 		} else {
 			eprintln!("Unable to acquire lock for internal Arc<Mutex> tracker")
 		};
-
-		iced::advanced::graphics::core::event::Status::Ignored
 	}
 }
