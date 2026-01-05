@@ -12,6 +12,39 @@ thread_local! {
 	static WINDOW_HANDLES: cell::RefCell<collections::BTreeMap<iced::window::Id, iced::window::raw_window_handle::RawWindowHandle>> = cell::RefCell::new(collections::BTreeMap::new());
 }
 
+/// Pass [`None`] to use the main window. If no window is active, Task never yields
+pub fn extract_window_id(window_id: Option<iced::window::Id>) -> iced::Task<ExtractedWindowId> {
+	if let Some(id) = window_id {
+		if WINDOW_HANDLES.with_borrow_mut(move |handles| handles.contains_key(&id)) {
+			return iced::Task::done(ExtractedWindowId(id));
+		};
+	}
+
+	match window_id {
+		Some(id) => iced::window::run(id, move |handle| {
+			let raw = handle.window_handle().unwrap().as_raw();
+
+			WINDOW_HANDLES.with_borrow_mut(move |handles| {
+				let _ = handles.insert(id, raw);
+			});
+
+			ExtractedWindowId(id)
+		}),
+		None => iced::window::oldest().then(move |id| match id {
+			Some(id) => iced::window::run(id, move |handle| {
+				let raw = handle.window_handle().unwrap().as_raw();
+
+				WINDOW_HANDLES.with_borrow_mut(move |handles| {
+					let _ = handles.insert(id, raw);
+				});
+
+				ExtractedWindowId(id)
+			}),
+			None => iced::Task::none(),
+		}),
+	}
+}
+
 /// Stores state for synchronizing visibility and bounds for any managed [`webviews`](wry::WebView)
 pub struct IcedWebviewManager {
 	// simply used to differentiate between subscriptions
@@ -55,39 +88,6 @@ impl IcedWebviewManager {
 			webviews: collections::BTreeMap::new(),
 			display_tracker: sync::Arc::new(sync::Mutex::new(collections::BTreeMap::new())),
 			subscription_ctl: sync::Arc::new(sync::Mutex::new(true)),
-		}
-	}
-
-	/// Pass [`None`] to use the main window. If no window is active, Task never yields
-	pub fn extract_window_id(window_id: Option<iced::window::Id>) -> iced::Task<ExtractedWindowId> {
-		if let Some(id) = window_id {
-			if WINDOW_HANDLES.with_borrow_mut(move |handles| handles.contains_key(&id)) {
-				return iced::Task::done(ExtractedWindowId(id));
-			};
-		}
-
-		match window_id {
-			Some(id) => iced::window::run(id, move |handle| {
-				let raw = handle.window_handle().unwrap().as_raw();
-
-				WINDOW_HANDLES.with_borrow_mut(move |handles| {
-					let _ = handles.insert(id, raw);
-				});
-
-				ExtractedWindowId(id)
-			}),
-			None => iced::window::oldest().then(move |id| match id {
-				Some(id) => iced::window::run(id, move |handle| {
-					let raw = handle.window_handle().unwrap().as_raw();
-
-					WINDOW_HANDLES.with_borrow_mut(move |handles| {
-						let _ = handles.insert(id, raw);
-					});
-
-					ExtractedWindowId(id)
-				}),
-				None => iced::Task::none(),
-			}),
 		}
 	}
 

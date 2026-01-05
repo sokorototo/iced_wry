@@ -48,7 +48,7 @@ fn main() {
 			Message::EditUrlInput(chars) => {
 				state.url_input = chars;
 			}
-			Message::CreateView => return iced_wry::IcedWebviewManager::extract_window_id(state.main_window).map(Message::ExtractedWindowHandle),
+			Message::CreateView => return iced_wry::extract_window_id(state.main_window).map(Message::ExtractedWindowHandle),
 			Message::ToggleWebview => state.webview_visible = !state.webview_visible,
 			Message::ExtractedWindowHandle(id) => {
 				let mut attributes = iced_wry::wry::WebViewAttributes::default();
@@ -73,16 +73,13 @@ fn main() {
 			widget::button("Go To").on_press_maybe((!state.url_input.is_empty()).then_some(Message::CreateView)),
 			widget::button(if state.webview_visible && state.webview.is_some() { "Hide Webview" } else { "Show Webview" }).on_press(Message::ToggleWebview),
 		]]
-		.push_maybe(state.webview_visible.then(|| state.webview.as_ref().map(|w| w.view(iced::Length::Fill, iced::Length::Fill))).flatten())
-		.push_maybe((!state.webview_visible).then_some(widget::text("Webview Not Displayed :)")))
+		.push(state.webview_visible.then(|| state.webview.as_ref().map(|w| w.view(iced::Length::Fill, iced::Length::Fill))).flatten())
+		.push((!state.webview_visible).then_some(widget::text("Webview Not Displayed :)")))
 	}
 
 	fn subscription<'a>(state: &'a State) -> iced::Subscription<Message> {
 		state.webview_manager.subscription(time::Duration::from_millis(25)).map(Message::IcedWryMessage)
 	}
 
-	iced::daemon::<_, Message, iced::Theme, iced::Renderer>("Simple Webview Test", update, view)
-		.subscription(subscription)
-		.run_with(new)
-		.unwrap();
+	iced::daemon::<_, Message, iced::Theme, iced::Renderer>(new, update, view).subscription(subscription).run().unwrap();
 }
