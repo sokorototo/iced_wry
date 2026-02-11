@@ -247,6 +247,12 @@ impl<'a, Message, Theme, R: iced::advanced::Renderer> iced::advanced::Widget<Mes
 		_cursor: iced::advanced::mouse::Cursor,
 		_viewport: &iced::Rectangle,
 	) {
+		// Pump the GTK event loop so WebKitGTK can process its internal events
+		#[cfg(target_os = "linux")]
+		while gtk::events_pending() {
+			gtk::main_iteration_do(false);
+		}
+
 		if let Some(webview) = sync::Weak::upgrade(&self.inner.webview) {
 			let bounds = layout.bounds();
 			let rect = wry::Rect {
