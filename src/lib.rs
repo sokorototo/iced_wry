@@ -247,12 +247,6 @@ impl<'a, Message, Theme, R: iced::advanced::Renderer> iced::advanced::Widget<Mes
 		_cursor: iced::advanced::mouse::Cursor,
 		_viewport: &iced::Rectangle,
 	) {
-		// Pump the GTK event loop so WebKitGTK can process its internal events
-		#[cfg(target_os = "linux")]
-		while gtk::events_pending() {
-			gtk::main_iteration_do(false);
-		}
-
 		if let Some(webview) = sync::Weak::upgrade(&self.inner.webview) {
 			let bounds = layout.bounds();
 			let rect = wry::Rect {
@@ -281,9 +275,18 @@ impl<'a, Message, Theme, R: iced::advanced::Renderer> iced::advanced::Widget<Mes
 		cursor: iced::advanced::mouse::Cursor,
 		_renderer: &R,
 		_clipboard: &mut dyn iced::advanced::Clipboard,
-		_shell: &mut iced::advanced::Shell<'_, Message>,
+		shell: &mut iced::advanced::Shell<'_, Message>,
 		_viewport: &iced::Rectangle,
 	) {
+		// Pump the GTK event loop so WebKitGTK can process its internal events
+		#[cfg(target_os = "linux")]
+		{
+			while gtk::events_pending() {
+				gtk::main_iteration_do(false);
+			}
+			shell.request_redraw();
+		}
+
 		let instant = match event {
 			iced::Event::Window(iced::window::Event::RedrawRequested(instant)) => instant,
 			iced::Event::Mouse(iced::mouse::Event::ButtonPressed(..)) => {
