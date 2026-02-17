@@ -304,10 +304,6 @@ impl<'a, Message, Theme, R: iced::advanced::Renderer> iced::advanced::Widget<Mes
 
 				return;
 			}
-			iced::Event::Keyboard(_) => {
-				shell.capture_event();
-				return;
-			}
 			_ => {
 				return;
 			}
@@ -323,5 +319,8 @@ impl<'a, Message, Theme, R: iced::advanced::Renderer> iced::advanced::Widget<Mes
 		} else {
 			eprintln!("Unable to acquire lock for internal Arc<Mutex> tracker")
 		};
+
+		// events never bubble outside of the webview
+		shell.capture_event();
 	}
 }
