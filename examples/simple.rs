@@ -68,13 +68,15 @@ fn main() {
 		state: &'a State,
 		_: iced::window::Id,
 	) -> widget::Column<'a, Message> {
-		widget::column![widget::row![
-			widget::text_input("Enter a URL to open", state.url_input.as_str()).on_input(Message::EditUrlInput),
-			widget::button("Go To").on_press_maybe((!state.url_input.is_empty()).then_some(Message::CreateView)),
-			widget::button(if state.webview_visible && state.webview.is_some() { "Hide Webview" } else { "Show Webview" }).on_press(Message::ToggleWebview),
-		]]
-		.push(state.webview_visible.then(|| state.webview.as_ref().map(|w| w.view(iced::Length::Fill, iced::Length::Fill))).flatten())
-		.push((!state.webview_visible).then_some(widget::text("Webview Not Displayed :)")))
+		widget::column![
+			widget::row![
+				widget::text_input("Enter a URL to open", state.url_input.as_str()).on_input(Message::EditUrlInput),
+				widget::button("Go To").on_press_maybe((!state.url_input.is_empty()).then_some(Message::CreateView)),
+				widget::button(if state.webview_visible && state.webview.is_some() { "Hide Webview" } else { "Show Webview" }).on_press(Message::ToggleWebview),
+			],
+			state.webview_visible.then(|| state.webview.as_ref().map(|w| w.view(iced::Length::Fill, iced::Length::Fill))).flatten(),
+			(!state.webview_visible).then_some(widget::text("Webview Not Displayed :)"))
+		]
 	}
 
 	fn subscription<'a>(state: &'a State) -> iced::Subscription<Message> {

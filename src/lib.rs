@@ -278,17 +278,18 @@ impl<'a, Message, Theme, R: iced::advanced::Renderer> iced::advanced::Widget<Mes
 		shell: &mut iced::advanced::Shell<'_, Message>,
 		_viewport: &iced::Rectangle,
 	) {
-		// Pump the GTK event loop so WebKitGTK can process its internal events
-		#[cfg(target_os = "linux")]
-		{
-			while gtk::events_pending() {
-				gtk::main_iteration_do(false);
-			}
-			shell.request_redraw();
-		}
-
 		let instant = match event {
-			iced::Event::Window(iced::window::Event::RedrawRequested(instant)) => instant,
+			iced::Event::Window(iced::window::Event::RedrawRequested(instant)) => {
+				// Pump the GTK event loop so WebKitGTK can process its internal events
+				#[cfg(target_os = "linux")]
+				{
+					while gtk::events_pending() {
+						gtk::main_iteration_do(false);
+					}
+				}
+
+				instant
+			}
 			iced::Event::Mouse(iced::mouse::Event::ButtonPressed(..)) => {
 				let bounds = layout.bounds();
 				if let Some(pos) = cursor.position() {
@@ -301,6 +302,10 @@ impl<'a, Message, Theme, R: iced::advanced::Renderer> iced::advanced::Widget<Mes
 					}
 				};
 
+				return;
+			}
+			iced::Event::Keyboard(_) => {
+				shell.capture_event();
 				return;
 			}
 			_ => {
