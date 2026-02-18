@@ -178,6 +178,11 @@ impl IcedWebviewManager {
 		if let Ok(mut guard) = self.display_tracker.lock() {
 			let _ = guard.remove(&webview.id);
 		}
+
+		#[cfg(target_os = "linux")]
+		while gtk::events_pending() {
+			gtk::main_iteration_db(false);
+		}
 	}
 }
 
